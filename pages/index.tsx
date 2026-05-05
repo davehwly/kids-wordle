@@ -568,7 +568,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '0 6px',
     borderRadius: '10px',
     border: 'none',
-    backgroundColor: '#c8b49e',
+    backgroundColor: '#f8bbd0',
     color: '#241609',
     fontSize: '0.95rem',
     fontFamily: 'Fredoka, sans-serif',
