@@ -460,7 +460,7 @@ function tileStyle(status: TileStatus): React.CSSProperties {
     case 'correct': return { backgroundColor: '#3d9e3a', color: '#fff', borderColor: '#3d9e3a' };
     case 'present': return { backgroundColor: '#d4920a', color: '#fff', borderColor: '#d4920a' };
     case 'absent':  return { backgroundColor: '#6b7f87', color: '#fff', borderColor: '#6b7f87' };
-    case 'active':  return { borderColor: '#5a7880', backgroundColor: '#fff' };
+    case 'active':  return { borderColor: '#e91e8c', backgroundColor: '#fff5f8' };
     default:        return {};
   }
 }
@@ -493,23 +493,23 @@ const styles: Record<string, React.CSSProperties> = {
     top: 0,
     right: 0,
     fontSize: '0.7rem',
-    color: '#7a8a95',
+    color: '#f48fb1',
     fontWeight: 400,
   },
   title: {
     fontSize: 'clamp(1.6rem, 5vw, 2.4rem)',
     fontWeight: 400,
-    color: '#c06010',
+    color: '#d81b6a',
     letterSpacing: '-0.5px',
   },
   subtitle: {
     fontSize: '1rem',
     fontWeight: 400,
-    color: '#7a5535',
+    color: '#c2185b',
     marginTop: '2px',
   },
   message: {
-    background: '#241609',
+    background: '#880e4f',
     color: '#fff',
     borderRadius: '20px',
     padding: '8px 20px',
@@ -533,7 +533,7 @@ const styles: Record<string, React.CSSProperties> = {
   tile: {
     width: 'clamp(64px, 18vw, 80px)',
     height: 'clamp(64px, 18vw, 80px)',
-    border: '3px solid #b8a490',
+    border: '3px solid #f48fb1',
     borderRadius: '14px',
     display: 'flex',
     alignItems: 'center',
@@ -541,8 +541,8 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 'clamp(2rem, 7vw, 2.6rem)',
     fontWeight: 400,
     textTransform: 'lowercase',
-    color: '#241609',
-    backgroundColor: '#fff',
+    color: '#5c2d42',
+    backgroundColor: '#fff5f8',
     transition: 'border-color 0.1s',
     transformStyle: 'preserve-3d',
   },
@@ -568,8 +568,8 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '0 12px',
     borderRadius: '10px',
     border: 'none',
-    backgroundColor: '#f8bbd0',
-    color: '#241609',
+    backgroundColor: '#fce4ec',
+    color: '#5c2d42',
     fontSize: '1.9rem',
     fontFamily: 'Fredoka, sans-serif',
     fontWeight: 400,
@@ -587,12 +587,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '1.1rem',
     fontFamily: 'Fredoka, sans-serif',
     fontWeight: 400,
-    backgroundColor: '#c06010',
+    backgroundColor: '#e91e8c',
     color: '#fff',
     border: 'none',
     borderRadius: '30px',
     cursor: 'pointer',
-    boxShadow: '0 4px 12px rgba(192,96,16,0.35)',
+    boxShadow: '0 4px 12px rgba(233,30,140,0.35)',
     transition: 'transform 0.15s, box-shadow 0.15s',
   },
 };
