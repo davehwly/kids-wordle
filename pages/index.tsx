@@ -1,9 +1,12 @@
 import Head from 'next/head';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import pkg from '../package.json';
+import { TARGET_WORDS_5, VALID_WORDS_5 } from '../data/words5';
 
-// Common kid-friendly words — used as puzzle targets
-const TARGET_WORDS = [
+type Mode = 'kids' | 'adult';
+
+// Common kid-friendly 3-letter words — used as puzzle targets
+const TARGET_WORDS_3: readonly string[] = [
   'ace','act','age','ago','aid','aim','air','ale','ant','ape',
   'arc','arm','art','ash','ask','axe','aye','bad','bag','ban',
   'bar','bat','bay','bed','bee','beg','big','bin','bit','boa',
@@ -40,9 +43,9 @@ const TARGET_WORDS = [
   'yin','yip','you','zed','zip','zoo',
 ];
 
-// Full dictionary — every 3-letter word from /usr/share/dict/words plus
-// common everyday words the Mac dictionary omits (poo, nah, hmm, shh…)
-const VALID_WORDS = new Set([
+// Full 3-letter dictionary — every 3-letter word from /usr/share/dict/words
+// plus common everyday words (poo, nah, hmm, shh…)
+const VALID_WORDS_3: ReadonlySet<string> = new Set([
   'aal','aam','aba','abb','abe','abo','abu','aby','ace','ach','act','ada','add','ade','ado','ady',
   'adz','aer','aes','aft','aga','age','ago','agy','aha','aho','aht','ahu','aid','ail','aim','air',
   'ait','aix','aka','ake','ako','aku','ala','alb','ale','alf','alk','all','aln','alo','alp','alt',
@@ -125,12 +128,10 @@ const VALID_WORDS = new Set([
   'yew','yex','yez','yid','yin','yip','yis','yoe','yoi','yok','yom','yon','yor','yot','you','yow',
   'yox','yoy','yuh','yun','yus','zac','zad','zag','zak','zan','zar','zat','zax','zea','zed','zee',
   'zel','zen','zep','zer','zig','zip','zoa','zoo',
-  // also accept all target words and any targets not already covered
-  ...TARGET_WORDS,
+  ...TARGET_WORDS_3,
 ]);
 
 const MAX_GUESSES = 6;
-const WORD_LENGTH = 3;
 
 type TileStatus = 'correct' | 'present' | 'absent' | 'empty' | 'active';
 
@@ -147,19 +148,105 @@ const KEYBOARD_ROWS = [
   ['enter','z','x','c','v','b','n','m','⌫'],
 ];
 
-function getRandomWord(): string {
-  return TARGET_WORDS[Math.floor(Math.random() * TARGET_WORDS.length)];
+interface Theme {
+  body: { bg: string; text: string };
+  page: { titleColor: string; subtitleColor: string; versionColor: string };
+  message: { bg: string; color: string };
+  tile: {
+    emptyBg: string;
+    emptyText: string;
+    border: string;
+    activeBg: string;
+    activeBorder: string;
+    correctBg: string;
+    presentBg: string;
+    absentBg: string;
+    onTileText: string;
+  };
+  key: { bg: string; text: string; correctBg: string; presentBg: string; absentBg: string };
+  playAgain: { bg: string; text: string; shadow: string };
+  toggle: { bg: string; activeBg: string; text: string; activeText: string; border: string };
+}
+
+const THEME_KIDS: Theme = {
+  // Dulux Sea Urchin 4 (#b9d3d1) — soft mint/teal pastel
+  body: { bg: '#dceae9', text: '#274646' },
+  page: { titleColor: '#1f5b58', subtitleColor: '#2d706c', versionColor: '#7ba6a3' },
+  message: { bg: '#1f5b58', color: '#ffffff' },
+  tile: {
+    emptyBg: '#eaf3f2',
+    emptyText: '#274646',
+    border: '#7ba6a3',
+    activeBg: '#b9d3d1',
+    activeBorder: '#2d706c',
+    correctBg: '#3d9e3a',
+    presentBg: '#d4920a',
+    absentBg: '#6b7f87',
+    onTileText: '#ffffff',
+  },
+  key: {
+    bg: '#b9d3d1',
+    text: '#274646',
+    correctBg: '#3d9e3a',
+    presentBg: '#d4920a',
+    absentBg: '#6b7f87',
+  },
+  playAgain: { bg: '#2d706c', text: '#ffffff', shadow: '0 4px 12px rgba(31,91,88,0.35)' },
+  toggle: {
+    bg: '#eaf3f2',
+    activeBg: '#2d706c',
+    text: '#274646',
+    activeText: '#ffffff',
+    border: '#7ba6a3',
+  },
+};
+
+const THEME_ADULT: Theme = {
+  // Dark teal — Wordle dark mode with deep teal accent
+  body: { bg: '#0f1e20', text: '#e6edec' },
+  page: { titleColor: '#ffffff', subtitleColor: '#9bb5b3', versionColor: '#5b7a78' },
+  message: { bg: '#1a3033', color: '#ffffff' },
+  tile: {
+    emptyBg: '#0f1e20',
+    emptyText: '#ffffff',
+    border: '#3a5054',
+    activeBg: '#0f1e20',
+    activeBorder: '#5fb3a8',
+    correctBg: '#538d4e',
+    presentBg: '#b59f3b',
+    absentBg: '#3a3a3c',
+    onTileText: '#ffffff',
+  },
+  key: {
+    bg: '#3a5054',
+    text: '#ffffff',
+    correctBg: '#538d4e',
+    presentBg: '#b59f3b',
+    absentBg: '#1f2728',
+  },
+  playAgain: { bg: '#2d8079', text: '#ffffff', shadow: '0 4px 12px rgba(45,128,121,0.45)' },
+  toggle: {
+    bg: '#1a3033',
+    activeBg: '#2d8079',
+    text: '#9bb5b3',
+    activeText: '#ffffff',
+    border: '#3a5054',
+  },
+};
+
+function getRandomWord(words: readonly string[]): string {
+  return words[Math.floor(Math.random() * words.length)];
 }
 
 function evaluateGuess(guess: string, target: string): TileStatus[] {
-  const result: TileStatus[] = Array(WORD_LENGTH).fill('absent');
+  const len = target.length;
+  const result: TileStatus[] = Array(len).fill('absent');
   const targetArr = target.split('');
   const guessArr = guess.split('');
-  const targetUsed = Array(WORD_LENGTH).fill(false);
-  const guessUsed = Array(WORD_LENGTH).fill(false);
+  const targetUsed = Array(len).fill(false);
+  const guessUsed = Array(len).fill(false);
 
-  // First pass: correct positions
-  for (let i = 0; i < WORD_LENGTH; i++) {
+  for (let i = 0; i < len; i++) {
     if (guessArr[i] === targetArr[i]) {
       result[i] = 'correct';
       targetUsed[i] = true;
@@ -167,10 +254,9 @@ function evaluateGuess(guess: string, target: string): TileStatus[] {
     }
   }
 
-  // Second pass: present but wrong position
-  for (let i = 0; i < WORD_LENGTH; i++) {
+  for (let i = 0; i < len; i++) {
     if (guessUsed[i]) continue;
-    for (let j = 0; j < WORD_LENGTH; j++) {
+    for (let j = 0; j < len; j++) {
       if (!targetUsed[j] && guessArr[i] === targetArr[j]) {
         result[i] = 'present';
         targetUsed[j] = true;
@@ -182,36 +268,106 @@ function evaluateGuess(guess: string, target: string): TileStatus[] {
   return result;
 }
 
-const SAVE_KEY = 'kw_state';
+const MODE_KEY = 'kw_mode';
+const SAVE_KEY_KIDS = 'kw_state_kids';
+const SAVE_KEY_ADULT = 'kw_state_adult';
+// Legacy key from before mode toggle existed — migrate into the kids slot.
+const LEGACY_SAVE_KEY = 'kw_state';
 
-function loadSave(): { target: string; guesses: Tile[][]; gameOver: boolean; won: boolean; keyStatuses: Record<string, KeyStatus> } | null {
+interface SavedState {
+  target: string;
+  guesses: Tile[][];
+  gameOver: boolean;
+  won: boolean;
+  keyStatuses: Record<string, KeyStatus>;
+}
+
+function saveKeyFor(mode: Mode): string {
+  return mode === 'adult' ? SAVE_KEY_ADULT : SAVE_KEY_KIDS;
+}
+
+function loadSave(mode: Mode): SavedState | null {
+  if (typeof window === 'undefined') return null;
   try {
-    const raw = sessionStorage.getItem(SAVE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
+    const raw = sessionStorage.getItem(saveKeyFor(mode));
+    if (raw) return JSON.parse(raw);
+    if (mode === 'kids') {
+      const legacy = sessionStorage.getItem(LEGACY_SAVE_KEY);
+      if (legacy) {
+        sessionStorage.setItem(SAVE_KEY_KIDS, legacy);
+        sessionStorage.removeItem(LEGACY_SAVE_KEY);
+        return JSON.parse(legacy);
+      }
+    }
+    return null;
   } catch { return null; }
 }
 
-function saveState(state: { target: string; guesses: Tile[][]; gameOver: boolean; won: boolean; keyStatuses: Record<string, KeyStatus> }) {
-  try { sessionStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch {}
+function saveState(mode: Mode, state: SavedState) {
+  if (typeof window === 'undefined') return;
+  try { sessionStorage.setItem(saveKeyFor(mode), JSON.stringify(state)); } catch {}
 }
 
-function clearSave() {
-  try { sessionStorage.removeItem(SAVE_KEY); } catch {}
+function clearSave(mode: Mode) {
+  if (typeof window === 'undefined') return;
+  try { sessionStorage.removeItem(saveKeyFor(mode)); } catch {}
+}
+
+function loadMode(): Mode {
+  if (typeof window === 'undefined') return 'kids';
+  try {
+    const raw = localStorage.getItem(MODE_KEY);
+    return raw === 'adult' ? 'adult' : 'kids';
+  } catch { return 'kids'; }
+}
+
+function persistMode(mode: Mode) {
+  if (typeof window === 'undefined') return;
+  try { localStorage.setItem(MODE_KEY, mode); } catch {}
 }
 
 export default function Home() {
-  const [target, setTarget] = useState<string>(() => loadSave()?.target ?? getRandomWord());
-  const [guesses, setGuesses] = useState<Tile[][]>(() => loadSave()?.guesses ?? []);
+  const [mode, setMode] = useState<Mode>('kids');
+  const [hydrated, setHydrated] = useState(false);
+  const [target, setTarget] = useState<string>('');
+  const [guesses, setGuesses] = useState<Tile[][]>([]);
   const [currentGuess, setCurrentGuess] = useState<string>('');
-  const [gameOver, setGameOver] = useState<boolean>(() => loadSave()?.gameOver ?? false);
-  const [won, setWon] = useState<boolean>(() => loadSave()?.won ?? false);
+  const [gameOver, setGameOver] = useState<boolean>(false);
+  const [won, setWon] = useState<boolean>(false);
   const [shake, setShake] = useState(false);
-  const [keyStatuses, setKeyStatuses] = useState<Record<string, KeyStatus>>(() => loadSave()?.keyStatuses ?? {});
+  const [keyStatuses, setKeyStatuses] = useState<Record<string, KeyStatus>>({});
   const [message, setMessage] = useState('');
   const [revealRow, setRevealRow] = useState<number | null>(null);
 
-  // Track every timer so we can cancel them all on reset or unmount
+  const wordLength = mode === 'adult' ? 5 : 3;
+  const targets = mode === 'adult' ? TARGET_WORDS_5 : TARGET_WORDS_3;
+  const validWords = mode === 'adult' ? VALID_WORDS_5 : VALID_WORDS_3;
+  const theme = mode === 'adult' ? THEME_ADULT : THEME_KIDS;
+
+  // Hydrate state from storage on first client render to avoid SSR mismatch
+  useEffect(() => {
+    const m = loadMode();
+    const saved = loadSave(m);
+    setMode(m);
+    if (saved) {
+      setTarget(saved.target);
+      setGuesses(saved.guesses);
+      setGameOver(saved.gameOver);
+      setWon(saved.won);
+      setKeyStatuses(saved.keyStatuses);
+    } else {
+      setTarget(getRandomWord(m === 'adult' ? TARGET_WORDS_5 : TARGET_WORDS_3));
+    }
+    setHydrated(true);
+  }, []);
+
+  // Reflect theme on the document body
+  useEffect(() => {
+    if (!hydrated || typeof document === 'undefined') return;
+    document.body.style.backgroundColor = theme.body.bg;
+    document.body.style.color = theme.body.text;
+  }, [hydrated, theme]);
+
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const after = (fn: () => void, ms: number) => {
     const id = setTimeout(fn, ms);
@@ -223,18 +379,18 @@ export default function Home() {
     timers.current = [];
   };
 
-  // Cancel timers when the component unmounts
   useEffect(() => () => cancelAll(), []);
 
   // Persist game state whenever it changes
   useEffect(() => {
-    saveState({ target, guesses, gameOver, won, keyStatuses });
-  }, [target, guesses, gameOver, won, keyStatuses]);
+    if (!hydrated || !target) return;
+    saveState(mode, { target, guesses, gameOver, won, keyStatuses });
+  }, [hydrated, mode, target, guesses, gameOver, won, keyStatuses]);
 
-  const initGame = useCallback(() => {
+  const initGameForMode = useCallback((m: Mode) => {
     cancelAll();
-    clearSave();
-    setTarget(getRandomWord());
+    clearSave(m);
+    setTarget(getRandomWord(m === 'adult' ? TARGET_WORDS_5 : TARGET_WORDS_3));
     setGuesses([]);
     setCurrentGuess('');
     setGameOver(false);
@@ -244,22 +400,49 @@ export default function Home() {
     setRevealRow(null);
   }, []);
 
+  const initGame = useCallback(() => initGameForMode(mode), [initGameForMode, mode]);
+
+  const switchMode = useCallback((next: Mode) => {
+    if (next === mode) return;
+    cancelAll();
+    persistMode(next);
+    setMode(next);
+    setCurrentGuess('');
+    setMessage('');
+    setRevealRow(null);
+    setShake(false);
+    const saved = loadSave(next);
+    if (saved) {
+      setTarget(saved.target);
+      setGuesses(saved.guesses);
+      setGameOver(saved.gameOver);
+      setWon(saved.won);
+      setKeyStatuses(saved.keyStatuses);
+    } else {
+      setTarget(getRandomWord(next === 'adult' ? TARGET_WORDS_5 : TARGET_WORDS_3));
+      setGuesses([]);
+      setGameOver(false);
+      setWon(false);
+      setKeyStatuses({});
+    }
+  }, [mode]);
+
   const showMessage = (msg: string, duration = 1800) => {
     setMessage(msg);
     if (duration < 99999) after(() => setMessage(''), duration);
   };
 
   const submitGuess = useCallback(() => {
-    if (currentGuess.length !== WORD_LENGTH) {
+    if (currentGuess.length !== wordLength) {
       setShake(true);
-      showMessage('keep going! 🐾');
+      showMessage(mode === 'adult' ? 'not enough letters' : 'keep going! 🐾');
       after(() => setShake(false), 500);
       return;
     }
 
-    if (!VALID_WORDS.has(currentGuess)) {
+    if (!validWords.has(currentGuess)) {
       setShake(true);
-      showMessage('not a word i know! 🤔');
+      showMessage(mode === 'adult' ? 'not in word list' : 'not a word i know! 🤔');
       after(() => setShake(false), 500);
       return;
     }
@@ -274,7 +457,6 @@ export default function Home() {
     setGuesses(prev => [...prev, newTiles]);
     setRevealRow(rowIndex);
 
-    // Update key statuses after reveal animation
     after(() => {
       setKeyStatuses(prev => {
         const updated = { ...prev };
@@ -290,7 +472,7 @@ export default function Home() {
         return updated;
       });
       setRevealRow(null);
-    }, WORD_LENGTH * 350 + 200);
+    }, wordLength * 350 + 200);
 
     const isWin = currentGuess === target;
     const isLast = guesses.length + 1 >= MAX_GUESSES;
@@ -299,18 +481,23 @@ export default function Home() {
       after(() => {
         setWon(true);
         setGameOver(true);
-        const msgs = ['amazing! 🌟', 'you got it! 🎉', 'woohoo! 🥳', 'brilliant! ⭐'];
-        showMessage(msgs[Math.floor(Math.random() * msgs.length)], 99999);
-      }, WORD_LENGTH * 350 + 300);
+        const kidsMsgs = ['amazing! 🌟', 'you got it! 🎉', 'woohoo! 🥳', 'brilliant! ⭐'];
+        const adultMsgs = ['genius', 'magnificent', 'impressive', 'splendid', 'great', 'phew'];
+        const pool = mode === 'adult' ? adultMsgs : kidsMsgs;
+        showMessage(pool[Math.floor(Math.random() * pool.length)], 99999);
+      }, wordLength * 350 + 300);
     } else if (isLast) {
       after(() => {
         setGameOver(true);
-        showMessage(`the word was "${target}" 😊`, 99999);
-      }, WORD_LENGTH * 350 + 300);
+        const msg = mode === 'adult'
+          ? `the word was ${target.toUpperCase()}`
+          : `the word was "${target}" 😊`;
+        showMessage(msg, 99999);
+      }, wordLength * 350 + 300);
     }
 
     setCurrentGuess('');
-  }, [currentGuess, guesses, target]);
+  }, [currentGuess, guesses, target, wordLength, mode, validWords]);
 
   const handleKey = useCallback((key: string) => {
     if (gameOver) return;
@@ -319,10 +506,10 @@ export default function Home() {
       submitGuess();
     } else if (k === '⌫' || k === 'backspace') {
       setCurrentGuess(prev => prev.slice(0, -1));
-    } else if (/^[a-z]$/.test(k) && currentGuess.length < WORD_LENGTH) {
+    } else if (/^[a-z]$/.test(k) && currentGuess.length < wordLength) {
       setCurrentGuess(prev => prev + k);
     }
-  }, [gameOver, currentGuess, submitGuess]);
+  }, [gameOver, currentGuess, submitGuess, wordLength]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -333,42 +520,97 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handler);
   }, [handleKey]);
 
-  // Build board rows
-  const boardRows: Tile[][] = [];
-  for (let r = 0; r < MAX_GUESSES; r++) {
-    if (r < guesses.length) {
-      boardRows.push(guesses[r]);
-    } else if (r === guesses.length && !gameOver) {
-      // Active row
-      const row: Tile[] = [];
-      for (let c = 0; c < WORD_LENGTH; c++) {
-        row.push({
-          letter: currentGuess[c] ?? '',
-          status: currentGuess[c] ? 'active' : 'empty',
-        });
+  const boardRows = useMemo<Tile[][]>(() => {
+    const rows: Tile[][] = [];
+    for (let r = 0; r < MAX_GUESSES; r++) {
+      if (r < guesses.length) {
+        rows.push(guesses[r]);
+      } else if (r === guesses.length && !gameOver) {
+        const row: Tile[] = [];
+        for (let c = 0; c < wordLength; c++) {
+          row.push({
+            letter: currentGuess[c] ?? '',
+            status: currentGuess[c] ? 'active' : 'empty',
+          });
+        }
+        rows.push(row);
+      } else {
+        rows.push(Array(wordLength).fill({ letter: '', status: 'empty' }));
       }
-      boardRows.push(row);
-    } else {
-      boardRows.push(Array(WORD_LENGTH).fill({ letter: '', status: 'empty' }));
     }
-  }
+    return rows;
+  }, [guesses, currentGuess, gameOver, wordLength]);
+
+  const tileStyle = (status: TileStatus): React.CSSProperties => {
+    const t = theme.tile;
+    switch (status) {
+      case 'correct': return { backgroundColor: t.correctBg, color: t.onTileText, borderColor: t.correctBg };
+      case 'present': return { backgroundColor: t.presentBg, color: t.onTileText, borderColor: t.presentBg };
+      case 'absent':  return { backgroundColor: t.absentBg, color: t.onTileText, borderColor: t.absentBg };
+      case 'active':  return { borderColor: t.activeBorder, backgroundColor: t.activeBg, color: t.emptyText };
+      default:        return { backgroundColor: t.emptyBg, color: t.emptyText, borderColor: t.border };
+    }
+  };
+
+  const keyStyle = (status: KeyStatus): React.CSSProperties => {
+    const k = theme.key;
+    switch (status) {
+      case 'correct': return { backgroundColor: k.correctBg, color: '#fff' };
+      case 'present': return { backgroundColor: k.presentBg, color: '#fff' };
+      case 'absent':  return { backgroundColor: k.absentBg, color: '#fff' };
+      default:        return { backgroundColor: k.bg, color: k.text };
+    }
+  };
+
+  const headerTitle = mode === 'adult' ? 'wordle' : 'kids wordle 🌈';
+  const subtitle = mode === 'adult'
+    ? 'guess the 5-letter word'
+    : 'guess the 3-letter word!';
+  const docTitle = mode === 'adult' ? 'wordle' : 'kids wordle 🌈';
 
   return (
     <>
       <Head>
-        <title>kids wordle 🌈</title>
+        <title>{docTitle}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
-      <div style={styles.page}>
+      <div style={{ ...styles.page, color: theme.body.text }}>
+        <div style={{ ...styles.toggleWrap, borderColor: theme.toggle.border }}>
+          <button
+            type="button"
+            onClick={() => switchMode('kids')}
+            style={{
+              ...styles.toggleBtn,
+              backgroundColor: mode === 'kids' ? theme.toggle.activeBg : theme.toggle.bg,
+              color: mode === 'kids' ? theme.toggle.activeText : theme.toggle.text,
+            }}
+          >
+            kids
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode('adult')}
+            style={{
+              ...styles.toggleBtn,
+              backgroundColor: mode === 'adult' ? theme.toggle.activeBg : theme.toggle.bg,
+              color: mode === 'adult' ? theme.toggle.activeText : theme.toggle.text,
+            }}
+          >
+            adult
+          </button>
+        </div>
+
         <header style={styles.header}>
-          <h1 style={styles.title}>kids wordle 🌈</h1>
-          <p style={styles.subtitle}>guess the 3-letter word!</p>
-          <span style={styles.version}>v{pkg.version}</span>
+          <h1 style={{ ...styles.title, color: theme.page.titleColor }}>{headerTitle}</h1>
+          <p style={{ ...styles.subtitle, color: theme.page.subtitleColor }}>{subtitle}</p>
+          <span style={{ ...styles.version, color: theme.page.versionColor }}>v{pkg.version}</span>
         </header>
 
         {message && (
-          <div style={styles.message}>{message}</div>
+          <div style={{ ...styles.message, background: theme.message.bg, color: theme.message.color }}>
+            {message}
+          </div>
         )}
 
         <div style={styles.board}>
@@ -388,6 +630,7 @@ export default function Home() {
                     key={c}
                     style={{
                       ...styles.tile,
+                      ...(mode === 'adult' ? styles.tileSizeAdult : styles.tileSizeKids),
                       ...tileStyle(tile.status),
                       ...(isRevealing ? { animationDelay: delay, animationName: 'flip', animationDuration: '350ms', animationFillMode: 'forwards' } : {}),
                       ...(tile.letter && tile.status === 'active' ? styles.tilePop : {}),
@@ -404,26 +647,40 @@ export default function Home() {
         <div style={styles.keyboard}>
           {KEYBOARD_ROWS.map((row, r) => (
             <div key={r} style={styles.keyRow}>
-              {row.map(k => (
-                <button
-                  key={k}
-                  onClick={() => handleKey(k)}
-                  style={{
-                    ...styles.key,
-                    ...(k === 'enter' || k === '⌫' ? styles.keyWide : {}),
-                    ...keyStyle(keyStatuses[k] ?? 'unused'),
-                  }}
-                >
-                  {k}
-                </button>
-              ))}
+              {row.map(k => {
+                const isWide = k === 'enter' || k === '⌫';
+                return (
+                  <button
+                    key={k}
+                    onClick={() => handleKey(k)}
+                    style={{
+                      ...styles.key,
+                      ...(mode === 'adult' ? styles.keySizeAdult : styles.keySizeKids),
+                      ...(isWide ? (mode === 'adult' ? styles.keyWideAdult : styles.keyWideKids) : {}),
+                      ...keyStyle(keyStatuses[k] ?? 'unused'),
+                    }}
+                  >
+                    {k}
+                  </button>
+                );
+              })}
             </div>
           ))}
         </div>
 
         {gameOver && (
-          <button style={styles.playAgain} onClick={initGame}>
-            {won ? '🎉 play again!' : '🔄 try again!'}
+          <button
+            style={{
+              ...styles.playAgain,
+              backgroundColor: theme.playAgain.bg,
+              color: theme.playAgain.text,
+              boxShadow: theme.playAgain.shadow,
+            }}
+            onClick={initGame}
+          >
+            {won
+              ? (mode === 'adult' ? 'play again' : '🎉 play again!')
+              : (mode === 'adult' ? 'try again' : '🔄 try again!')}
           </button>
         )}
       </div>
@@ -455,25 +712,6 @@ export default function Home() {
   );
 }
 
-function tileStyle(status: TileStatus): React.CSSProperties {
-  switch (status) {
-    case 'correct': return { backgroundColor: '#3d9e3a', color: '#fff', borderColor: '#3d9e3a' };
-    case 'present': return { backgroundColor: '#d4920a', color: '#fff', borderColor: '#d4920a' };
-    case 'absent':  return { backgroundColor: '#6b7f87', color: '#fff', borderColor: '#6b7f87' };
-    case 'active':  return { borderColor: '#e91e8c', backgroundColor: '#fff5f8' };
-    default:        return {};
-  }
-}
-
-function keyStyle(status: KeyStatus): React.CSSProperties {
-  switch (status) {
-    case 'correct': return { backgroundColor: '#3d9e3a', color: '#fff' };
-    case 'present': return { backgroundColor: '#d4920a', color: '#fff' };
-    case 'absent':  return { backgroundColor: '#6b7f87', color: '#fff' };
-    default:        return {};
-  }
-}
-
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: '100%',
@@ -481,8 +719,28 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     padding: '16px 12px 24px',
-    gap: '16px',
+    gap: '14px',
     userSelect: 'none',
+  },
+  toggleWrap: {
+    display: 'inline-flex',
+    border: '2px solid',
+    borderRadius: '999px',
+    overflow: 'hidden',
+    padding: '2px',
+    gap: '2px',
+  },
+  toggleBtn: {
+    border: 'none',
+    padding: '6px 18px',
+    borderRadius: '999px',
+    fontFamily: 'Fredoka, sans-serif',
+    fontSize: '0.9rem',
+    fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'background-color 0.2s, color 0.2s',
+    minWidth: '64px',
+    textTransform: 'lowercase',
   },
   header: {
     textAlign: 'center',
@@ -493,24 +751,19 @@ const styles: Record<string, React.CSSProperties> = {
     top: 0,
     right: 0,
     fontSize: '0.7rem',
-    color: '#f48fb1',
     fontWeight: 400,
   },
   title: {
     fontSize: 'clamp(1.6rem, 5vw, 2.4rem)',
     fontWeight: 400,
-    color: '#d81b6a',
     letterSpacing: '-0.5px',
   },
   subtitle: {
     fontSize: '1rem',
     fontWeight: 400,
-    color: '#c2185b',
     marginTop: '2px',
   },
   message: {
-    background: '#880e4f',
-    color: '#fff',
     borderRadius: '20px',
     padding: '8px 20px',
     fontSize: '1rem',
@@ -531,20 +784,25 @@ const styles: Record<string, React.CSSProperties> = {
     animation: 'shake 0.45s ease',
   },
   tile: {
-    width: 'clamp(64px, 18vw, 80px)',
-    height: 'clamp(64px, 18vw, 80px)',
-    border: '3px solid #f48fb1',
+    border: '3px solid',
     borderRadius: '14px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: 'clamp(2rem, 7vw, 2.6rem)',
     fontWeight: 400,
     textTransform: 'lowercase',
-    color: '#5c2d42',
-    backgroundColor: '#fff5f8',
     transition: 'border-color 0.1s',
     transformStyle: 'preserve-3d',
+  },
+  tileSizeKids: {
+    width: 'clamp(64px, 18vw, 80px)',
+    height: 'clamp(64px, 18vw, 80px)',
+    fontSize: 'clamp(2rem, 7vw, 2.6rem)',
+  },
+  tileSizeAdult: {
+    width: 'clamp(48px, 13vw, 64px)',
+    height: 'clamp(48px, 13vw, 64px)',
+    fontSize: 'clamp(1.6rem, 5vw, 2.2rem)',
   },
   tilePop: {
     animation: 'pop 0.15s ease',
@@ -559,27 +817,39 @@ const styles: Record<string, React.CSSProperties> = {
   },
   keyRow: {
     display: 'flex',
-    gap: '10px',
+    gap: '6px',
     justifyContent: 'center',
+    width: '100%',
   },
   key: {
-    height: '52px',
-    minWidth: '68px',
-    padding: '0 12px',
-    borderRadius: '10px',
     border: 'none',
-    backgroundColor: '#fce4ec',
-    color: '#5c2d42',
-    fontSize: '1.9rem',
+    borderRadius: '10px',
     fontFamily: 'Fredoka, sans-serif',
     fontWeight: 400,
     cursor: 'pointer',
     transition: 'background-color 0.2s, transform 0.1s',
     touchAction: 'manipulation',
+    flex: '1 1 auto',
   },
-  keyWide: {
-    minWidth: '104px',
-    fontSize: '1.5rem',
+  keySizeKids: {
+    height: '52px',
+    minWidth: '60px',
+    padding: '0 12px',
+    fontSize: '1.6rem',
+  },
+  keySizeAdult: {
+    height: '54px',
+    minWidth: '32px',
+    padding: '0 6px',
+    fontSize: '1rem',
+  },
+  keyWideKids: {
+    flexBasis: '96px',
+    fontSize: '1.3rem',
+  },
+  keyWideAdult: {
+    flexBasis: '64px',
+    fontSize: '0.85rem',
   },
   playAgain: {
     marginTop: '8px',
@@ -587,12 +857,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '1.1rem',
     fontFamily: 'Fredoka, sans-serif',
     fontWeight: 400,
-    backgroundColor: '#e91e8c',
-    color: '#fff',
     border: 'none',
     borderRadius: '30px',
     cursor: 'pointer',
-    boxShadow: '0 4px 12px rgba(233,30,140,0.35)',
     transition: 'transform 0.15s, box-shadow 0.15s',
   },
 };

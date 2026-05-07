@@ -6,8 +6,9 @@
 
 html, body {
   height: 100%;
-  background-color: #fdf0f5;
-  color: #5c2d42;
+  background-color: #dceae9;
+  color: #274646;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 body {
