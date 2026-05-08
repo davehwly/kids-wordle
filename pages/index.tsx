@@ -169,35 +169,35 @@ interface Theme {
 }
 
 const THEME_KIDS: Theme = {
-  // Dulux Sea Urchin 4 (#b9d3d1) — soft mint/teal pastel
-  body: { bg: '#dceae9', text: '#274646' },
-  page: { titleColor: '#1f5b58', subtitleColor: '#2d706c', versionColor: '#7ba6a3' },
-  message: { bg: '#1f5b58', color: '#ffffff' },
+  // Baby pink — clear, saturated pink (not beige or teal)
+  body: { bg: '#fce8f0', text: '#6b1f40' },
+  page: { titleColor: '#b5254f', subtitleColor: '#c94b71', versionColor: '#e49db7' },
+  message: { bg: '#b5254f', color: '#ffffff' },
   tile: {
-    emptyBg: '#eaf3f2',
-    emptyText: '#274646',
-    border: '#7ba6a3',
-    activeBg: '#b9d3d1',
-    activeBorder: '#2d706c',
+    emptyBg: '#fff0f6',
+    emptyText: '#6b1f40',
+    border: '#e8b3c8',
+    activeBg: '#f9cede',
+    activeBorder: '#c94b71',
     correctBg: '#3d9e3a',
     presentBg: '#d4920a',
-    absentBg: '#6b7f87',
+    absentBg: '#b89daa',
     onTileText: '#ffffff',
   },
   key: {
-    bg: '#b9d3d1',
-    text: '#274646',
+    bg: '#f0b8cf',
+    text: '#5a1a30',
     correctBg: '#3d9e3a',
     presentBg: '#d4920a',
-    absentBg: '#6b7f87',
+    absentBg: '#b89daa',
   },
-  playAgain: { bg: '#2d706c', text: '#ffffff', shadow: '0 4px 12px rgba(31,91,88,0.35)' },
+  playAgain: { bg: '#b5254f', text: '#ffffff', shadow: '0 4px 12px rgba(181,37,79,0.35)' },
   toggle: {
-    bg: '#eaf3f2',
-    activeBg: '#2d706c',
-    text: '#274646',
+    bg: '#fff0f6',
+    activeBg: '#b5254f',
+    text: '#6b1f40',
     activeText: '#ffffff',
-    border: '#7ba6a3',
+    border: '#e8b3c8',
   },
 };
 
