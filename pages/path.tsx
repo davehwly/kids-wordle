@@ -1,6 +1,6 @@
 import Head from 'next/head';
 import Link from 'next/link';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import pkg from '../package.json';
 
 interface PuzzleNumber { row: number; col: number; n: number; }
@@ -43,6 +43,8 @@ const COLORS = {
   versionColor: '#7ba6a3',
   msgBg: '#1f5b58',
   msgText: '#ffffff',
+  hintBg: '#d4920a',
+  hintText: '#ffffff',
   emptyBg: '#eaf3f2',
   emptyBorder: '#cfe1df',
   pathBg: '#3d9e3a',
@@ -104,6 +106,11 @@ export default function PathGame() {
   const [won, setWon] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [message, setMessage] = useState('');
+  const [messageKind, setMessageKind] = useState<'win' | 'hint'>('win');
+  const [shakeCell, setShakeCell] = useState<Cell | null>(null);
+  const msgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRejectedRef = useRef<string | null>(null);
 
   const puzzle = PUZZLES[puzzleIndex];
   const numbers = useMemo(() => {
@@ -112,7 +119,24 @@ export default function PathGame() {
     return m;
   }, [puzzle]);
   const startCell = useMemo(() => puzzle.numbers.find(n => n.n === 1)!, [puzzle]);
+  const sortedNs = useMemo(
+    () => puzzle.numbers.map(n => n.n).sort((a, b) => a - b),
+    [puzzle],
+  );
+  const maxN = sortedNs[sortedNs.length - 1];
   const totalCells = puzzle.rows * puzzle.cols;
+
+  const showHint = useCallback((msg: string, cell?: Cell) => {
+    setMessageKind('hint');
+    setMessage(msg);
+    if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
+    msgTimerRef.current = setTimeout(() => setMessage(''), 1600);
+    if (cell) {
+      setShakeCell(cell);
+      if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
+      shakeTimerRef.current = setTimeout(() => setShakeCell(null), 450);
+    }
+  }, []);
 
   useEffect(() => {
     const saved = loadSave();
@@ -151,25 +175,68 @@ export default function PathGame() {
     if (lastInPath !== path.length - 1) return;
     setWon(true);
     const msgs = ['amazing! 🌟', 'you did it! 🎉', 'woohoo! 🥳', 'brilliant! ⭐'];
+    if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
+    setMessageKind('win');
     setMessage(msgs[Math.floor(Math.random() * msgs.length)]);
   }, [path, won, puzzle, totalCells]);
 
   const tryAddCell = useCallback((r: number, c: number) => {
+    const reject = (msg: string) => {
+      const k = cellKey(r, c);
+      if (lastRejectedRef.current === k) return;
+      lastRejectedRef.current = k;
+      showHint(msg, { row: r, col: c });
+    };
+    const accept = () => {
+      lastRejectedRef.current = null;
+    };
     setPath(prev => {
       if (prev.length === 0) {
-        if (r === startCell.row && c === startCell.col) return [{ row: r, col: c }];
+        if (r === startCell.row && c === startCell.col) {
+          accept();
+          return [{ row: r, col: c }];
+        }
+        reject('tap the 1 to start! 👉');
         return prev;
       }
       const tail = prev[prev.length - 1];
       if (tail.row === r && tail.col === c) return prev;
+
       const existingIdx = prev.findIndex(p => p.row === r && p.col === c);
       if (existingIdx >= 0) {
+        accept();
         return prev.slice(0, existingIdx + 1);
       }
-      if (!isAdjacent(tail, { row: r, col: c })) return prev;
+
+      if (!isAdjacent(tail, { row: r, col: c })) {
+        // silently ignore — fingers wander between cells; no hint needed
+        return prev;
+      }
+
+      const tailNum = numbers.get(cellKey(tail.row, tail.col));
+      if (tailNum === maxN) {
+        reject('go back and fill the empty squares! ↩️');
+        return prev;
+      }
+
+      const newNum = numbers.get(cellKey(r, c));
+      if (newNum !== undefined) {
+        const visited = new Set<number>();
+        for (const p of prev) {
+          const n = numbers.get(cellKey(p.row, p.col));
+          if (n !== undefined) visited.add(n);
+        }
+        const nextExpected = sortedNs.find(n => !visited.has(n))!;
+        if (newNum !== nextExpected) {
+          reject(`go to the ${nextExpected} first! ✋`);
+          return prev;
+        }
+      }
+
+      accept();
       return [...prev, { row: r, col: c }];
     });
-  }, [startCell]);
+  }, [startCell, numbers, maxN, sortedNs, showHint]);
 
   const onCellPointerDown = (e: React.PointerEvent, r: number, c: number) => {
     if (won) return;
@@ -191,7 +258,10 @@ export default function PathGame() {
       if (Number.isNaN(r) || Number.isNaN(c)) return;
       tryAddCell(r, c);
     };
-    const onUp = () => setIsDragging(false);
+    const onUp = () => {
+      setIsDragging(false);
+      lastRejectedRef.current = null;
+    };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
@@ -202,17 +272,25 @@ export default function PathGame() {
     };
   }, [isDragging, won, tryAddCell]);
 
+  const clearTransients = () => {
+    setMessage('');
+    setShakeCell(null);
+    lastRejectedRef.current = null;
+    if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
+    if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
+  };
+
   const reset = () => {
     setPath([]);
     setWon(false);
-    setMessage('');
+    clearTransients();
   };
 
   const goToPuzzle = (i: number) => {
     setPuzzleIndex(((i % PUZZLES.length) + PUZZLES.length) % PUZZLES.length);
     setPath([]);
     setWon(false);
-    setMessage('');
+    clearTransients();
   };
 
   const padding = 5;
@@ -283,7 +361,14 @@ export default function PathGame() {
         </div>
 
         {message && (
-          <div style={{ ...styles.message, background: COLORS.msgBg, color: COLORS.msgText }}>
+          <div
+            style={{
+              ...styles.message,
+              background: messageKind === 'hint' ? COLORS.hintBg : COLORS.msgBg,
+              color: messageKind === 'hint' ? COLORS.hintText : COLORS.msgText,
+              animation: messageKind === 'hint' ? 'message-pop 0.2s ease' : 'none',
+            }}
+          >
             {message}
           </div>
         )}
@@ -300,8 +385,14 @@ export default function PathGame() {
             const conns = getConnections(cell, path);
             const inPath = !!conns;
             const num = numbers.get(cellKey(r, c));
+            const isShaking = !!shakeCell && shakeCell.row === r && shakeCell.col === c;
 
-            const innerBg = inPath ? COLORS.pathBg : COLORS.emptyBg;
+            const innerBg = isShaking
+              ? COLORS.hintBg
+              : inPath ? COLORS.pathBg : COLORS.emptyBg;
+            const innerBorder = isShaking
+              ? `2px solid ${COLORS.hintBg}`
+              : inPath ? 'none' : `2px solid ${COLORS.emptyBorder}`;
             const innerStyle: React.CSSProperties = {
               position: 'absolute',
               top:    inPath && conns!.up    ? 0 : padding,
@@ -313,7 +404,7 @@ export default function PathGame() {
               borderBottomLeftRadius:  inPath && (conns!.down  || conns!.left)  ? 0 : 14,
               borderBottomRightRadius: inPath && (conns!.down  || conns!.right) ? 0 : 14,
               backgroundColor: innerBg,
-              border: inPath ? 'none' : `2px solid ${COLORS.emptyBorder}`,
+              border: innerBorder,
               transition: 'background-color 0.12s',
             };
 
@@ -324,7 +415,10 @@ export default function PathGame() {
                 data-row={r}
                 data-col={c}
                 onPointerDown={(e) => onCellPointerDown(e, r, c)}
-                style={styles.cell}
+                style={{
+                  ...styles.cell,
+                  animation: isShaking ? 'cell-shake 0.4s ease' : 'none',
+                }}
               >
                 <div style={innerStyle} />
                 {num !== undefined && (
@@ -374,6 +468,21 @@ export default function PathGame() {
           )}
         </div>
       </div>
+
+      <style>{`
+        @keyframes cell-shake {
+          0%, 100% { transform: translateX(0); }
+          20% { transform: translateX(-3px); }
+          40% { transform: translateX(3px); }
+          60% { transform: translateX(-2px); }
+          80% { transform: translateX(2px); }
+        }
+        @keyframes message-pop {
+          0%   { transform: scale(0.92); }
+          60%  { transform: scale(1.04); }
+          100% { transform: scale(1); }
+        }
+      `}</style>
     </>
   );
 }
