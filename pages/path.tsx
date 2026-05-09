@@ -360,19 +360,6 @@ export default function PathGame() {
           </button>
         </div>
 
-        {message && (
-          <div
-            style={{
-              ...styles.message,
-              background: messageKind === 'hint' ? COLORS.hintBg : COLORS.msgBg,
-              color: messageKind === 'hint' ? COLORS.hintText : COLORS.msgText,
-              animation: messageKind === 'hint' ? 'message-pop 0.2s ease' : 'none',
-            }}
-          >
-            {message}
-          </div>
-        )}
-
         <div
           style={{
             ...styles.grid,
@@ -437,6 +424,19 @@ export default function PathGame() {
               </div>
             );
           })}
+        </div>
+
+        <div
+          aria-live="polite"
+          style={{
+            ...styles.message,
+            background: messageKind === 'hint' ? COLORS.hintBg : COLORS.msgBg,
+            color: messageKind === 'hint' ? COLORS.hintText : COLORS.msgText,
+            opacity: message ? 1 : 0,
+            transition: 'opacity 0.18s ease, background-color 0.15s',
+          }}
+        >
+          {message || ' '}
         </div>
 
         <div style={styles.actions}>
@@ -564,7 +564,10 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '1.15rem',
     fontWeight: 500,
     textAlign: 'center',
-    minWidth: '200px',
+    minWidth: '240px',
+    minHeight: '44px',
+    lineHeight: 1.2,
+    whiteSpace: 'pre',
   },
   grid: {
     display: 'grid',
