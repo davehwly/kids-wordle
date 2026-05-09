@@ -1,7 +1,7 @@
 {
   "name": "bngo",
   "short_name": "bngo",
-  "description": "guess the word — wordle for kids and adults",
+  "description": "fun word and path puzzles for kids and adults",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
