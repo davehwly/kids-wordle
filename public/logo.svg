@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="kids wordle">
+  <rect width="1024" height="1024" fill="#fce8f0"/>
+  <g font-family="Fredoka, 'Segoe UI Rounded', 'SF Pro Rounded', system-ui, -apple-system, sans-serif" font-weight="500" font-size="170" text-anchor="middle" fill="#ffffff" dominant-baseline="central">
+    <g>
+      <rect x="164" y="402" width="220" height="220" rx="32" fill="#3d9e3a"/>
+      <text x="274" y="520">k</text>
+    </g>
+    <g>
+      <rect x="402" y="402" width="220" height="220" rx="32" fill="#d4920a"/>
+      <text x="512" y="520">i</text>
+    </g>
+    <g>
+      <rect x="640" y="402" width="220" height="220" rx="32" fill="#b5254f"/>
+      <text x="750" y="520">d</text>
+    </g>
+  </g>
+</svg>

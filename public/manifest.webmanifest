@@ -1,0 +1,17 @@
+{
+  "name": "kids wordle",
+  "short_name": "kids wordle",
+  "description": "guess the 3-letter word — a wordle for kids",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fce8f0",
+  "theme_color": "#b5254f",
+  "categories": ["games", "education", "kids"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
