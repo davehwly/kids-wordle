@@ -9,6 +9,7 @@ html, body {
   background-color: #dceae9;
   color: #274646;
   transition: background-color 0.25s ease, color 0.25s ease;
+  overscroll-behavior: contain;
 }
 
 body {

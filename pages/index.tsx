@@ -169,35 +169,35 @@ interface Theme {
 }
 
 const THEME_KIDS: Theme = {
-  // Baby pink — clear, saturated pink (not beige or teal)
-  body: { bg: '#fce8f0', text: '#6b1f40' },
-  page: { titleColor: '#b5254f', subtitleColor: '#c94b71', versionColor: '#e49db7' },
-  message: { bg: '#b5254f', color: '#ffffff' },
+  // Dulux Sea Urchin 4 (#b9d3d1) — soft mint/teal pastel
+  body: { bg: '#dceae9', text: '#274646' },
+  page: { titleColor: '#1f5b58', subtitleColor: '#2d706c', versionColor: '#7ba6a3' },
+  message: { bg: '#1f5b58', color: '#ffffff' },
   tile: {
-    emptyBg: '#fff0f6',
-    emptyText: '#6b1f40',
-    border: '#e8b3c8',
-    activeBg: '#f9cede',
-    activeBorder: '#c94b71',
+    emptyBg: '#eaf3f2',
+    emptyText: '#274646',
+    border: '#7ba6a3',
+    activeBg: '#b9d3d1',
+    activeBorder: '#2d706c',
     correctBg: '#3d9e3a',
     presentBg: '#d4920a',
-    absentBg: '#b89daa',
+    absentBg: '#6b7f87',
     onTileText: '#ffffff',
   },
   key: {
-    bg: '#f0b8cf',
-    text: '#5a1a30',
+    bg: '#b9d3d1',
+    text: '#274646',
     correctBg: '#3d9e3a',
     presentBg: '#d4920a',
-    absentBg: '#b89daa',
+    absentBg: '#6b7f87',
   },
-  playAgain: { bg: '#b5254f', text: '#ffffff', shadow: '0 4px 12px rgba(181,37,79,0.35)' },
+  playAgain: { bg: '#2d706c', text: '#ffffff', shadow: '0 4px 12px rgba(31,91,88,0.35)' },
   toggle: {
-    bg: '#fff0f6',
-    activeBg: '#b5254f',
-    text: '#6b1f40',
+    bg: '#eaf3f2',
+    activeBg: '#2d706c',
+    text: '#274646',
     activeText: '#ffffff',
-    border: '#e8b3c8',
+    border: '#7ba6a3',
   },
 };
 
@@ -338,6 +338,7 @@ export default function Home() {
   const [keyStatuses, setKeyStatuses] = useState<Record<string, KeyStatus>>({});
   const [message, setMessage] = useState('');
   const [revealRow, setRevealRow] = useState<number | null>(null);
+  const [revealedCount, setRevealedCount] = useState(0);
 
   const wordLength = mode === 'adult' ? 5 : 3;
   const targets = mode === 'adult' ? TARGET_WORDS_5 : TARGET_WORDS_3;
@@ -456,6 +457,11 @@ export default function Home() {
     const rowIndex = guesses.length;
     setGuesses(prev => [...prev, newTiles]);
     setRevealRow(rowIndex);
+    setRevealedCount(0);
+    for (let c = 0; c < wordLength; c++) {
+      const col = c;
+      after(() => setRevealedCount(prev => Math.max(prev, col + 1)), col * 350 + 175);
+    }
 
     after(() => {
       setKeyStatuses(prev => {
@@ -562,11 +568,11 @@ export default function Home() {
     }
   };
 
-  const headerTitle = mode === 'adult' ? 'wordle' : 'kids wordle 🌈';
+  const headerTitle = 'bngo';
   const subtitle = mode === 'adult'
     ? 'guess the 5-letter word'
     : 'guess the 3-letter word!';
-  const docTitle = mode === 'adult' ? 'wordle' : 'kids wordle 🌈';
+  const docTitle = 'bngo';
 
   return (
     <>
@@ -575,7 +581,17 @@ export default function Home() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
-      <div style={{ ...styles.page, color: theme.body.text }}>
+      <div
+        style={{
+          ...styles.page,
+          color: theme.body.text,
+          fontFamily: mode === 'adult'
+            ? "'Inter', system-ui, -apple-system, sans-serif"
+            : "'Fredoka', sans-serif",
+          textTransform: mode === 'adult' ? 'uppercase' : 'none',
+          letterSpacing: mode === 'adult' ? '0.04em' : 'normal',
+        }}
+      >
         <div style={{ ...styles.toggleWrap, borderColor: theme.toggle.border }}>
           <button
             type="button"
@@ -624,6 +640,8 @@ export default function Home() {
             >
               {row.map((tile, c) => {
                 const isRevealing = revealRow === r;
+                const showStatus = !isRevealing || c < revealedCount;
+                const effectiveStatus: TileStatus = showStatus ? tile.status : 'active';
                 const delay = isRevealing ? `${c * 350}ms` : '0ms';
                 return (
                   <div
@@ -631,7 +649,7 @@ export default function Home() {
                     style={{
                       ...styles.tile,
                       ...(mode === 'adult' ? styles.tileSizeAdult : styles.tileSizeKids),
-                      ...tileStyle(tile.status),
+                      ...tileStyle(effectiveStatus),
                       ...(isRevealing ? { animationDelay: delay, animationName: 'flip', animationDuration: '350ms', animationFillMode: 'forwards' } : {}),
                       ...(tile.letter && tile.status === 'active' ? styles.tilePop : {}),
                     }}
@@ -649,6 +667,7 @@ export default function Home() {
             <div key={r} style={styles.keyRow}>
               {row.map(k => {
                 const isWide = k === 'enter' || k === '⌫';
+                const isBackspace = k === '⌫';
                 return (
                   <button
                     key={k}
@@ -657,6 +676,7 @@ export default function Home() {
                       ...styles.key,
                       ...(mode === 'adult' ? styles.keySizeAdult : styles.keySizeKids),
                       ...(isWide ? (mode === 'adult' ? styles.keyWideAdult : styles.keyWideKids) : {}),
+                      ...(isBackspace ? styles.keyBackspace : {}),
                       ...keyStyle(keyStatuses[k] ?? 'unused'),
                     }}
                   >
@@ -735,15 +755,15 @@ const styles: Record<string, React.CSSProperties> = {
   },
   toggleBtn: {
     border: 'none',
-    padding: '6px 18px',
+    padding: '8px 22px',
     borderRadius: '999px',
-    fontFamily: 'Fredoka, sans-serif',
-    fontSize: '0.9rem',
+    fontFamily: 'inherit',
+    fontSize: '1.05rem',
     fontWeight: 500,
     cursor: 'pointer',
     transition: 'background-color 0.2s, color 0.2s',
-    minWidth: '64px',
-    textTransform: 'lowercase',
+    minWidth: '72px',
+    textTransform: 'inherit',
   },
   header: {
     textAlign: 'center',
@@ -757,22 +777,22 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 400,
   },
   title: {
-    fontSize: 'clamp(1.6rem, 5vw, 2.4rem)',
-    fontWeight: 400,
+    fontSize: 'clamp(2rem, 7vw, 3.2rem)',
+    fontWeight: 600,
     letterSpacing: '-0.5px',
   },
   subtitle: {
-    fontSize: '1rem',
+    fontSize: '1.15rem',
     fontWeight: 400,
-    marginTop: '2px',
+    marginTop: '4px',
   },
   message: {
     borderRadius: '20px',
-    padding: '8px 20px',
-    fontSize: '1rem',
-    fontWeight: 400,
+    padding: '10px 24px',
+    fontSize: '1.15rem',
+    fontWeight: 500,
     textAlign: 'center',
-    minWidth: '180px',
+    minWidth: '200px',
   },
   board: {
     display: 'flex',
@@ -792,20 +812,20 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontWeight: 400,
-    textTransform: 'lowercase',
+    fontWeight: 500,
+    textTransform: 'inherit',
     transition: 'border-color 0.1s',
     transformStyle: 'preserve-3d',
   },
   tileSizeKids: {
-    width: 'clamp(64px, 18vw, 80px)',
-    height: 'clamp(64px, 18vw, 80px)',
-    fontSize: 'clamp(2rem, 7vw, 2.6rem)',
+    width: 'clamp(72px, 20vw, 92px)',
+    height: 'clamp(72px, 20vw, 92px)',
+    fontSize: 'clamp(2.4rem, 8.5vw, 3.2rem)',
   },
   tileSizeAdult: {
-    width: 'clamp(48px, 13vw, 64px)',
-    height: 'clamp(48px, 13vw, 64px)',
-    fontSize: 'clamp(1.6rem, 5vw, 2.2rem)',
+    width: 'clamp(56px, 15vw, 76px)',
+    height: 'clamp(56px, 15vw, 76px)',
+    fontSize: 'clamp(2rem, 6vw, 2.6rem)',
   },
   tilePop: {
     animation: 'pop 0.15s ease',
@@ -828,8 +848,8 @@ const styles: Record<string, React.CSSProperties> = {
   key: {
     border: 'none',
     borderRadius: '10px',
-    fontFamily: 'Fredoka, sans-serif',
-    fontWeight: 400,
+    fontFamily: 'inherit',
+    fontWeight: 500,
     cursor: 'pointer',
     transition: 'background-color 0.2s, transform 0.1s',
     touchAction: 'manipulation',
@@ -838,27 +858,31 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 0,
   },
   keySizeKids: {
-    height: 'clamp(44px, 12vw, 52px)',
-    fontSize: 'clamp(1rem, 4.5vw, 1.6rem)',
+    height: 'clamp(54px, 14vw, 64px)',
+    fontSize: 'clamp(1.3rem, 5.5vw, 1.9rem)',
   },
   keySizeAdult: {
-    height: 'clamp(44px, 12vw, 54px)',
-    fontSize: 'clamp(0.85rem, 3.5vw, 1rem)',
+    height: 'clamp(54px, 14vw, 64px)',
+    fontSize: 'clamp(1.1rem, 4.5vw, 1.4rem)',
   },
   keyWideKids: {
     flexGrow: 1.5,
-    fontSize: 'clamp(0.85rem, 3vw, 1.3rem)',
+    fontSize: 'clamp(1rem, 3.5vw, 1.4rem)',
   },
   keyWideAdult: {
     flexGrow: 1.5,
-    fontSize: 'clamp(0.75rem, 2.5vw, 0.85rem)',
+    fontSize: 'clamp(0.9rem, 3vw, 1.1rem)',
+  },
+  keyBackspace: {
+    fontSize: 'clamp(1.8rem, 6vw, 2.4rem)',
+    fontWeight: 600,
   },
   playAgain: {
     marginTop: '8px',
-    padding: '14px 32px',
-    fontSize: '1.1rem',
-    fontFamily: 'Fredoka, sans-serif',
-    fontWeight: 400,
+    padding: '16px 36px',
+    fontSize: '1.3rem',
+    fontFamily: 'inherit',
+    fontWeight: 500,
     border: 'none',
     borderRadius: '30px',
     cursor: 'pointer',
