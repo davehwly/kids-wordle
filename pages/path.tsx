@@ -126,6 +126,16 @@ export default function PathGame() {
   const maxN = sortedNs[sortedNs.length - 1];
   const totalCells = puzzle.rows * puzzle.cols;
 
+  // Persistent hint: she has hit the highest number (path is "done" by number
+  // order) but the grid isn't full yet. Stays visible until she fixes it.
+  const persistentHint = useMemo(() => {
+    if (won || path.length === 0 || path.length === totalCells) return '';
+    const tail = path[path.length - 1];
+    const tailNum = numbers.get(cellKey(tail.row, tail.col));
+    if (tailNum === maxN) return 'fill all the gaps! ✨';
+    return '';
+  }, [path, won, numbers, maxN, totalCells]);
+
   const showHint = useCallback((msg: string, cell?: Cell) => {
     setMessageKind('hint');
     setMessage(msg);
@@ -430,13 +440,13 @@ export default function PathGame() {
           aria-live="polite"
           style={{
             ...styles.message,
-            background: messageKind === 'hint' ? COLORS.hintBg : COLORS.msgBg,
-            color: messageKind === 'hint' ? COLORS.hintText : COLORS.msgText,
-            opacity: message ? 1 : 0,
+            background: (message && messageKind === 'win') ? COLORS.msgBg : COLORS.hintBg,
+            color: (message && messageKind === 'win') ? COLORS.msgText : COLORS.hintText,
+            opacity: (message || persistentHint) ? 1 : 0,
             transition: 'opacity 0.18s ease, background-color 0.15s',
           }}
         >
-          {message || ' '}
+          {message || persistentHint || ' '}
         </div>
 
         <div style={styles.actions}>
