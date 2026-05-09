@@ -1,4 +1,4 @@
-const CACHE = 'kids-wordle-v2';
+const CACHE = 'kids-wordle-v3';
 const PRECACHE = [
   '/',
   '/manifest.webmanifest',

@@ -4,10 +4,17 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import pkg from '../package.json';
 
 interface PuzzleNumber { row: number; col: number; n: number; }
-interface Puzzle { rows: number; cols: number; numbers: PuzzleNumber[]; }
+type Wall = readonly [number, number, number, number]; // [r1,c1,r2,c2], smaller cell first
+interface Puzzle {
+  rows: number;
+  cols: number;
+  numbers: PuzzleNumber[];
+  walls?: readonly Wall[];
+}
 interface Cell { row: number; col: number; }
 
 // Hand-crafted puzzles, max 5×5 — verified solvable Hamiltonian paths.
+// walls block movement between two adjacent cells; smaller cell listed first.
 const PUZZLES: readonly Puzzle[] = [
   { rows: 3, cols: 3, numbers: [
     { row: 0, col: 0, n: 1 }, { row: 2, col: 2, n: 2 },
@@ -16,21 +23,26 @@ const PUZZLES: readonly Puzzle[] = [
     { row: 0, col: 0, n: 1 }, { row: 2, col: 1, n: 2 }, { row: 0, col: 2, n: 3 },
   ]},
   { rows: 4, cols: 4, numbers: [
-    { row: 0, col: 0, n: 1 }, { row: 3, col: 0, n: 2 },
+    { row: 0, col: 0, n: 1 }, { row: 2, col: 2, n: 2 }, { row: 3, col: 0, n: 3 },
   ]},
   { rows: 4, cols: 4, numbers: [
     { row: 0, col: 0, n: 1 }, { row: 1, col: 2, n: 2 }, { row: 3, col: 0, n: 3 },
   ]},
-  { rows: 5, cols: 5, numbers: [
-    { row: 0, col: 0, n: 1 }, { row: 4, col: 4, n: 2 },
+  { rows: 4, cols: 4, numbers: [
+    { row: 0, col: 0, n: 1 }, { row: 0, col: 3, n: 2 },
+    { row: 3, col: 3, n: 3 }, { row: 3, col: 0, n: 4 },
   ]},
   { rows: 5, cols: 5, numbers: [
     { row: 0, col: 0, n: 1 }, { row: 2, col: 2, n: 2 }, { row: 4, col: 4, n: 3 },
-  ]},
+  ], walls: [[0, 1, 1, 1], [3, 1, 4, 1]] as const },
   { rows: 5, cols: 5, numbers: [
     { row: 0, col: 0, n: 1 }, { row: 0, col: 4, n: 2 },
     { row: 4, col: 4, n: 3 }, { row: 4, col: 0, n: 4 },
-  ]},
+  ], walls: [[1, 1, 2, 1], [1, 3, 2, 3]] as const },
+  { rows: 5, cols: 5, numbers: [
+    { row: 0, col: 0, n: 1 }, { row: 2, col: 0, n: 2 }, { row: 0, col: 2, n: 3 },
+    { row: 2, col: 4, n: 4 }, { row: 4, col: 4, n: 5 },
+  ], walls: [[1, 0, 1, 1], [3, 3, 4, 3]] as const },
 ];
 
 const SAVE_KEY = 'kw_path_state';
@@ -45,6 +57,7 @@ const COLORS = {
   msgText: '#ffffff',
   hintBg: '#d4920a',
   hintText: '#ffffff',
+  wallColor: '#a64422',
   emptyBg: '#eaf3f2',
   emptyBorder: '#cfe1df',
   pathBg: '#3d9e3a',
@@ -61,6 +74,13 @@ const COLORS = {
 function cellKey(r: number, c: number) { return `${r}-${c}`; }
 function isAdjacent(a: Cell, b: Cell) {
   return Math.abs(a.row - b.row) + Math.abs(a.col - b.col) === 1;
+}
+function edgeKey(a: Cell, b: Cell): string {
+  const aFirst = a.row < b.row || (a.row === b.row && a.col < b.col);
+  const [r1, c1, r2, c2] = aFirst
+    ? [a.row, a.col, b.row, b.col]
+    : [b.row, b.col, a.row, a.col];
+  return `${r1}-${c1}-${r2}-${c2}`;
 }
 
 interface Connections { up: boolean; down: boolean; left: boolean; right: boolean; }
@@ -125,6 +145,13 @@ export default function PathGame() {
   );
   const maxN = sortedNs[sortedNs.length - 1];
   const totalCells = puzzle.rows * puzzle.cols;
+  const wallSet = useMemo(() => {
+    const s = new Set<string>();
+    for (const w of puzzle.walls ?? []) {
+      s.add(`${w[0]}-${w[1]}-${w[2]}-${w[3]}`);
+    }
+    return s;
+  }, [puzzle]);
 
   // Persistent hint: she has hit the highest number (path is "done" by number
   // order) but the grid isn't full yet. Stays visible until she fixes it.
@@ -223,6 +250,11 @@ export default function PathGame() {
         return prev;
       }
 
+      if (wallSet.has(edgeKey(tail, { row: r, col: c }))) {
+        reject('blocked! 🧱');
+        return prev;
+      }
+
       const tailNum = numbers.get(cellKey(tail.row, tail.col));
       if (tailNum === maxN) {
         reject('go back and fill the empty squares! ↩️');
@@ -246,7 +278,7 @@ export default function PathGame() {
       accept();
       return [...prev, { row: r, col: c }];
     });
-  }, [startCell, numbers, maxN, sortedNs, showHint]);
+  }, [startCell, numbers, maxN, sortedNs, wallSet, showHint]);
 
   const onCellPointerDown = (e: React.PointerEvent, r: number, c: number) => {
     if (won) return;
@@ -383,6 +415,8 @@ export default function PathGame() {
             const inPath = !!conns;
             const num = numbers.get(cellKey(r, c));
             const isShaking = !!shakeCell && shakeCell.row === r && shakeCell.col === c;
+            const rightWall = wallSet.has(`${r}-${c}-${r}-${c + 1}`);
+            const bottomWall = wallSet.has(`${r}-${c}-${r + 1}-${c}`);
 
             const innerBg = isShaking
               ? COLORS.hintBg
@@ -430,6 +464,38 @@ export default function PathGame() {
                   >
                     {num}
                   </div>
+                )}
+                {rightWall && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 2,
+                      bottom: 2,
+                      right: -3,
+                      width: 6,
+                      borderRadius: 3,
+                      background: COLORS.wallColor,
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.18)',
+                      zIndex: 2,
+                      pointerEvents: 'none',
+                    }}
+                  />
+                )}
+                {bottomWall && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 2,
+                      right: 2,
+                      bottom: -3,
+                      height: 6,
+                      borderRadius: 3,
+                      background: COLORS.wallColor,
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.18)',
+                      zIndex: 2,
+                      pointerEvents: 'none',
+                    }}
+                  />
                 )}
               </div>
             );
