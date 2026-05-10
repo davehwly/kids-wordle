@@ -13,37 +13,92 @@ interface Puzzle {
 }
 interface Cell { row: number; col: number; }
 
-// Hand-crafted puzzles, max 5×5 — verified solvable Hamiltonian paths.
-// walls block movement between two adjacent cells; smaller cell listed first.
-const PUZZLES: readonly Puzzle[] = [
-  { rows: 3, cols: 3, numbers: [
-    { row: 0, col: 0, n: 1 }, { row: 2, col: 2, n: 2 },
-  ]},
-  { rows: 3, cols: 3, numbers: [
-    { row: 0, col: 0, n: 1 }, { row: 2, col: 1, n: 2 }, { row: 0, col: 2, n: 3 },
-  ]},
-  { rows: 4, cols: 4, numbers: [
-    { row: 0, col: 0, n: 1 }, { row: 2, col: 2, n: 2 }, { row: 3, col: 0, n: 3 },
-  ]},
-  { rows: 4, cols: 4, numbers: [
-    { row: 0, col: 0, n: 1 }, { row: 1, col: 2, n: 2 }, { row: 3, col: 0, n: 3 },
-  ]},
-  { rows: 4, cols: 4, numbers: [
-    { row: 0, col: 0, n: 1 }, { row: 0, col: 3, n: 2 },
-    { row: 3, col: 3, n: 3 }, { row: 3, col: 0, n: 4 },
-  ]},
-  { rows: 5, cols: 5, numbers: [
-    { row: 0, col: 0, n: 1 }, { row: 2, col: 2, n: 2 }, { row: 4, col: 4, n: 3 },
-  ], walls: [[0, 1, 1, 1], [3, 1, 4, 1]] as const },
-  { rows: 5, cols: 5, numbers: [
-    { row: 0, col: 0, n: 1 }, { row: 0, col: 4, n: 2 },
-    { row: 4, col: 4, n: 3 }, { row: 4, col: 0, n: 4 },
-  ], walls: [[1, 1, 2, 1], [1, 3, 2, 3]] as const },
-  { rows: 5, cols: 5, numbers: [
-    { row: 0, col: 0, n: 1 }, { row: 2, col: 0, n: 2 }, { row: 0, col: 2, n: 3 },
-    { row: 2, col: 4, n: 4 }, { row: 4, col: 4, n: 5 },
-  ], walls: [[1, 0, 1, 1], [3, 3, 4, 3]] as const },
+// Difficulty curve: rows × cols and number of checkpoints to scatter along the
+// generated Hamiltonian path. Levels generate a fresh random puzzle on demand.
+interface Level { rows: number; cols: number; nums: number; }
+const LEVELS: readonly Level[] = [
+  { rows: 3, cols: 3, nums: 3 },
+  { rows: 3, cols: 3, nums: 4 },
+  { rows: 4, cols: 4, nums: 4 },
+  { rows: 4, cols: 4, nums: 5 },
+  { rows: 4, cols: 4, nums: 5 },
+  { rows: 5, cols: 5, nums: 4 },
+  { rows: 5, cols: 5, nums: 5 },
+  { rows: 5, cols: 5, nums: 6 },
 ];
+
+function shuffleArr<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function genHamiltonianPath(rows: number, cols: number): Cell[] {
+  const total = rows * cols;
+  const dirs: ReadonlyArray<readonly [number, number]> = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+  const dfs = (r: number, c: number, visited: boolean[], path: Cell[]): boolean => {
+    if (r < 0 || r >= rows || c < 0 || c >= cols) return false;
+    const idx = r * cols + c;
+    if (visited[idx]) return false;
+    visited[idx] = true;
+    path.push({ row: r, col: c });
+    if (path.length === total) return true;
+    const order = shuffleArr([...dirs]);
+    for (const [dr, dc] of order) {
+      if (dfs(r + dr, c + dc, visited, path)) return true;
+    }
+    visited[idx] = false;
+    path.pop();
+    return false;
+  };
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const startR = Math.floor(Math.random() * rows);
+    const startC = Math.floor(Math.random() * cols);
+    const visited = new Array<boolean>(total).fill(false);
+    const path: Cell[] = [];
+    if (dfs(startR, startC, visited, path)) return path;
+  }
+  // Fallback row-snake path — always succeeds on rectangular grids.
+  const path: Cell[] = [];
+  for (let r = 0; r < rows; r++) {
+    if (r % 2 === 0) for (let c = 0; c < cols; c++) path.push({ row: r, col: c });
+    else for (let c = cols - 1; c >= 0; c--) path.push({ row: r, col: c });
+  }
+  return path;
+}
+
+function pickCheckpointIndices(pathLen: number, k: number): number[] {
+  // Spread checkpoints with light jitter so positions vary but don't clump.
+  const indices: number[] = [0];
+  for (let i = 1; i < k - 1; i++) {
+    const center = Math.round(i * (pathLen - 1) / (k - 1));
+    const prevCenter = Math.round((i - 1) * (pathLen - 1) / (k - 1));
+    const nextCenter = Math.round((i + 1) * (pathLen - 1) / (k - 1));
+    const lo = Math.max(indices[indices.length - 1] + 1, prevCenter + 1);
+    const hi = Math.min(pathLen - 2, nextCenter - 1);
+    const idx = lo >= hi ? center : lo + Math.floor(Math.random() * (hi - lo + 1));
+    indices.push(idx);
+  }
+  indices.push(pathLen - 1);
+  return indices;
+}
+
+function genPuzzle(level: Level): Puzzle {
+  const path = genHamiltonianPath(level.rows, level.cols);
+  const idxs = pickCheckpointIndices(path.length, level.nums);
+  const numbers: PuzzleNumber[] = idxs.map((idx, i) => ({
+    row: path[idx].row,
+    col: path[idx].col,
+    n: i + 1,
+  }));
+  return { rows: level.rows, cols: level.cols, numbers };
+}
+
+function genAllPuzzles(): Puzzle[] {
+  return LEVELS.map(l => genPuzzle(l));
+}
 
 const SAVE_KEY = 'kw_path_state';
 
@@ -86,7 +141,7 @@ function edgeKey(a: Cell, b: Cell): string {
   return `${r1}-${c1}-${r2}-${c2}`;
 }
 
-interface SavedState { puzzleIndex: number; path: Cell[]; won: boolean; }
+interface SavedState { puzzleIndex: number; puzzles: Puzzle[]; path: Cell[]; won: boolean; }
 
 function loadSave(): SavedState | null {
   if (typeof window === 'undefined') return null;
@@ -94,8 +149,14 @@ function loadSave(): SavedState | null {
     const raw = sessionStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw);
-    if (typeof s.puzzleIndex !== 'number' || s.puzzleIndex < 0 || s.puzzleIndex >= PUZZLES.length) return null;
-    return { puzzleIndex: s.puzzleIndex, path: Array.isArray(s.path) ? s.path : [], won: !!s.won };
+    if (typeof s.puzzleIndex !== 'number' || s.puzzleIndex < 0 || s.puzzleIndex >= LEVELS.length) return null;
+    if (!Array.isArray(s.puzzles) || s.puzzles.length !== LEVELS.length) return null;
+    return {
+      puzzleIndex: s.puzzleIndex,
+      puzzles: s.puzzles,
+      path: Array.isArray(s.path) ? s.path : [],
+      won: !!s.won,
+    };
   } catch { return null; }
 }
 
@@ -106,6 +167,7 @@ function saveState(s: SavedState) {
 
 export default function PathGame() {
   const [puzzleIndex, setPuzzleIndex] = useState(0);
+  const [puzzles, setPuzzles] = useState<Puzzle[] | null>(null);
   const [path, setPath] = useState<Cell[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [won, setWon] = useState(false);
@@ -117,7 +179,9 @@ export default function PathGame() {
   const shakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastRejectedRef = useRef<string | null>(null);
 
-  const puzzle = PUZZLES[puzzleIndex];
+  const puzzle: Puzzle = puzzles
+    ? puzzles[puzzleIndex]
+    : { rows: 0, cols: 0, numbers: [] };
   const numbers = useMemo(() => {
     const m = new Map<string, number>();
     puzzle.numbers.forEach(n => m.set(cellKey(n.row, n.col), n.n));
@@ -173,17 +237,20 @@ export default function PathGame() {
   useEffect(() => {
     const saved = loadSave();
     if (saved) {
+      setPuzzles(saved.puzzles);
       setPuzzleIndex(saved.puzzleIndex);
       setPath(saved.path);
       setWon(saved.won);
+    } else {
+      setPuzzles(genAllPuzzles());
     }
     setHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
-    saveState({ puzzleIndex, path, won });
-  }, [hydrated, puzzleIndex, path, won]);
+    if (!hydrated || !puzzles) return;
+    saveState({ puzzleIndex, puzzles, path, won });
+  }, [hydrated, puzzleIndex, puzzles, path, won]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -324,7 +391,19 @@ export default function PathGame() {
   };
 
   const goToPuzzle = (i: number) => {
-    setPuzzleIndex(((i % PUZZLES.length) + PUZZLES.length) % PUZZLES.length);
+    setPuzzleIndex(((i % LEVELS.length) + LEVELS.length) % LEVELS.length);
+    setPath([]);
+    setWon(false);
+    clearTransients();
+  };
+
+  const shuffleCurrent = () => {
+    setPuzzles(prev => {
+      if (!prev) return prev;
+      const next = [...prev];
+      next[puzzleIndex] = genPuzzle(LEVELS[puzzleIndex]);
+      return next;
+    });
     setPath([]);
     setWon(false);
     clearTransients();
@@ -385,7 +464,7 @@ export default function PathGame() {
             ‹
           </button>
           <span style={{ ...styles.puzzleLabel, color: COLORS.titleColor }}>
-            puzzle {puzzleIndex + 1} of {PUZZLES.length}
+            puzzle {puzzleIndex + 1} of {LEVELS.length}
           </span>
           <button
             type="button"
@@ -480,7 +559,7 @@ export default function PathGame() {
                       backgroundColor: isFinal ? COLORS.finalNumberBg : COLORS.numberBg,
                       color: isFinal ? COLORS.finalNumberText : COLORS.numberText,
                       borderColor: isFinal ? COLORS.finalNumberBorder : COLORS.numberBorder,
-                      animation: isNext ? 'number-pulse 1.4s ease-in-out infinite' : 'none',
+                      animation: isNext ? 'number-pulse 1.1s ease-out infinite' : 'none',
                     }}
                   >
                     {num}
@@ -549,6 +628,18 @@ export default function PathGame() {
           >
             🔄 reset
           </button>
+          <button
+            type="button"
+            onClick={shuffleCurrent}
+            style={{
+              ...styles.resetBtn,
+              borderColor: COLORS.toggleBorder,
+              color: COLORS.titleColor,
+              backgroundColor: COLORS.toggleBg,
+            }}
+          >
+            🎲 new layout
+          </button>
           {won && (
             <button
               type="button"
@@ -580,8 +671,18 @@ export default function PathGame() {
           100% { transform: scale(1); }
         }
         @keyframes number-pulse {
-          0%, 100% { transform: translate(-50%, -50%) scale(1); }
-          50%      { transform: translate(-50%, -50%) scale(1.12); }
+          0% {
+            transform: translate(-50%, -50%) scale(1);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 0 0 0 rgba(31,91,88,0.65);
+          }
+          55% {
+            transform: translate(-50%, -50%) scale(1.22);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.18), 0 0 0 22px rgba(31,91,88,0);
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(1);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 0 0 0 rgba(31,91,88,0);
+          }
         }
       `}</style>
     </>
