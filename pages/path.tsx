@@ -64,6 +64,9 @@ const COLORS = {
   numberBg: '#ffffff',
   numberText: '#1f5b58',
   numberBorder: '#1f5b58',
+  finalNumberBg: '#f9c846',
+  finalNumberText: '#1f5b58',
+  finalNumberBorder: '#1f5b58',
   buttonBg: '#2d706c',
   buttonText: '#ffffff',
   buttonShadow: '0 4px 12px rgba(31,91,88,0.35)',
@@ -81,24 +84,6 @@ function edgeKey(a: Cell, b: Cell): string {
     ? [a.row, a.col, b.row, b.col]
     : [b.row, b.col, a.row, a.col];
   return `${r1}-${c1}-${r2}-${c2}`;
-}
-
-interface Connections { up: boolean; down: boolean; left: boolean; right: boolean; }
-
-function getConnections(cell: Cell, path: Cell[]): Connections | null {
-  const idx = path.findIndex(p => p.row === cell.row && p.col === cell.col);
-  if (idx < 0) return null;
-  const conns: Connections = { up: false, down: false, left: false, right: false };
-  const ns: Cell[] = [];
-  if (idx > 0) ns.push(path[idx - 1]);
-  if (idx < path.length - 1) ns.push(path[idx + 1]);
-  for (const n of ns) {
-    if (n.row === cell.row + 1 && n.col === cell.col) conns.down = true;
-    else if (n.row === cell.row - 1 && n.col === cell.col) conns.up = true;
-    else if (n.col === cell.col + 1 && n.row === cell.row) conns.right = true;
-    else if (n.col === cell.col - 1 && n.row === cell.row) conns.left = true;
-  }
-  return conns;
 }
 
 interface SavedState { puzzleIndex: number; path: Cell[]; won: boolean; }
@@ -152,6 +137,16 @@ export default function PathGame() {
     }
     return s;
   }, [puzzle]);
+
+  const nextExpected = useMemo(() => {
+    if (won) return null;
+    const visited = new Set<number>();
+    for (const p of path) {
+      const n = numbers.get(cellKey(p.row, p.col));
+      if (n !== undefined) visited.add(n);
+    }
+    return sortedNs.find(n => !visited.has(n)) ?? null;
+  }, [path, numbers, sortedNs, won]);
 
   // Persistent hint: she has hit the highest number (path is "done" by number
   // order) but the grid isn't full yet. Stays visible until she fixes it.
@@ -409,33 +404,58 @@ export default function PathGame() {
             gridTemplateRows: `repeat(${puzzle.rows}, ${cellSize})`,
           }}
         >
+          {path.length > 0 && (
+            <svg
+              aria-hidden="true"
+              viewBox={`0 0 ${puzzle.cols} ${puzzle.rows}`}
+              preserveAspectRatio="none"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                pointerEvents: 'none',
+                zIndex: 1,
+                overflow: 'visible',
+              }}
+            >
+              {path.length === 1 ? (
+                <circle
+                  cx={path[0].col + 0.5}
+                  cy={path[0].row + 0.5}
+                  r={0.18}
+                  fill={COLORS.pathBg}
+                />
+              ) : (
+                <polyline
+                  points={path.map(p => `${p.col + 0.5},${p.row + 0.5}`).join(' ')}
+                  fill="none"
+                  stroke={COLORS.pathBg}
+                  strokeWidth={0.36}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+            </svg>
+          )}
           {cells.map((cell) => {
             const r = cell.row, c = cell.col;
-            const conns = getConnections(cell, path);
-            const inPath = !!conns;
             const num = numbers.get(cellKey(r, c));
             const isShaking = !!shakeCell && shakeCell.row === r && shakeCell.col === c;
             const rightWall = wallSet.has(`${r}-${c}-${r}-${c + 1}`);
             const bottomWall = wallSet.has(`${r}-${c}-${r + 1}-${c}`);
+            const isFinal = num !== undefined && num === maxN;
+            const isNext = num !== undefined && num === nextExpected;
 
-            const innerBg = isShaking
-              ? COLORS.hintBg
-              : inPath ? COLORS.pathBg : COLORS.emptyBg;
-            const innerBorder = isShaking
-              ? `2px solid ${COLORS.hintBg}`
-              : inPath ? 'none' : `2px solid ${COLORS.emptyBorder}`;
             const innerStyle: React.CSSProperties = {
               position: 'absolute',
-              top:    inPath && conns!.up    ? 0 : padding,
-              bottom: inPath && conns!.down  ? 0 : padding,
-              left:   inPath && conns!.left  ? 0 : padding,
-              right:  inPath && conns!.right ? 0 : padding,
-              borderTopLeftRadius:     inPath && (conns!.up    || conns!.left)  ? 0 : 14,
-              borderTopRightRadius:    inPath && (conns!.up    || conns!.right) ? 0 : 14,
-              borderBottomLeftRadius:  inPath && (conns!.down  || conns!.left)  ? 0 : 14,
-              borderBottomRightRadius: inPath && (conns!.down  || conns!.right) ? 0 : 14,
-              backgroundColor: innerBg,
-              border: innerBorder,
+              top: padding,
+              bottom: padding,
+              left: padding,
+              right: padding,
+              borderRadius: 14,
+              backgroundColor: isShaking ? COLORS.hintBg : COLORS.emptyBg,
+              border: `2px solid ${isShaking ? COLORS.hintBg : COLORS.emptyBorder}`,
               transition: 'background-color 0.12s',
             };
 
@@ -457,9 +477,10 @@ export default function PathGame() {
                     style={{
                       ...styles.numberCircle,
                       fontSize: numberSize,
-                      backgroundColor: COLORS.numberBg,
-                      color: COLORS.numberText,
-                      borderColor: COLORS.numberBorder,
+                      backgroundColor: isFinal ? COLORS.finalNumberBg : COLORS.numberBg,
+                      color: isFinal ? COLORS.finalNumberText : COLORS.numberText,
+                      borderColor: isFinal ? COLORS.finalNumberBorder : COLORS.numberBorder,
+                      animation: isNext ? 'number-pulse 1.4s ease-in-out infinite' : 'none',
                     }}
                   >
                     {num}
@@ -558,6 +579,10 @@ export default function PathGame() {
           60%  { transform: scale(1.04); }
           100% { transform: scale(1); }
         }
+        @keyframes number-pulse {
+          0%, 100% { transform: translate(-50%, -50%) scale(1); }
+          50%      { transform: translate(-50%, -50%) scale(1.12); }
+        }
       `}</style>
     </>
   );
@@ -649,6 +674,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'grid',
     gap: 0,
     touchAction: 'none',
+    position: 'relative',
   },
   cell: {
     position: 'relative',
@@ -671,6 +697,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     pointerEvents: 'none',
     boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+    zIndex: 2,
   },
   actions: {
     display: 'flex',
